@@ -1,0 +1,9 @@
+build/
+.cache/
+.perf_results/
+compile_commands.json
+*.o
+*.exe
+*.out
+*.app
+.vscode/

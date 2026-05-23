@@ -1,0 +1,17 @@
+CompileFlags:
+  Add: [-std=c++17, -Wall, -I/home/q/matching-engine/include]
+
+Diagnostics:
+  Suppress:
+    - non-trivially-copyable
+    - "*is not used directly*"
+
+Index:
+  Background: Build
+
+---
+If:
+  PathMatch: .*\.cpp$
+  PathExclude: .*/build/.*
+CompileFlags:
+  Add: [-std=c++17, -O3]
