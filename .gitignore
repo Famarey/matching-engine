@@ -1,9 +1,7 @@
 build/
-.cache/
 .perf_results/
+.cache/
+.vscode/
 compile_commands.json
 *.o
-*.exe
-*.out
-*.app
-.vscode/
+*.a
