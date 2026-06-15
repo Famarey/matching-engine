@@ -19,53 +19,53 @@
 ```
                          ┌──────────────────────────────────────────────────────┐
                          │                  外部世界                            │
-                         │                                                    │
-                         │  ┌──────────┐  UDP/WireOrder   ┌────────────────┐  │
+                         │                                                      │
+                         │  ┌──────────┐  UDP/WireOrder     ┌────────────────┐  │
                          │  │UDP Client│ ──(34B binary)──▶ │                │  │
-                         │  │(测试工具) │                   │    网络层       │  │
-                         │  └──────────┘                   │                │  │
+                         │  │(测试工具)│                    │    网络层      │  │
+                         │  └──────────┘                    │                │  │
                          │                                  │  UDPServer     │  │
-                         │  ┌──────────┐  内存Order       │  recv_loop()   │  │
-                         │  │Producer  │ ───────────────▶ │                │  │
-                         │  │Generator │  (direct模式)     └───────┬────────┘  │
-                         │  └──────────┘                          │           │
-                         └────────────────────────────────────────┼───────────┘
+                         │  ┌──────────┐    内存Order       │  recv_loop()   │  │
+                         │  │Producer  │ ───────────────▶  │                │  │
+                         │  │Generator │  (direct模式)      └───────┬────────┘  │
+                         │  └──────────┘                            │           │
+                         └──────────────────────────────────────────┼───────────┘
                                                           LockFreeQueue
                                                           (SPSC, 无锁)
                                                           capacity=65536
                                                                   │
-                                                         ┌────────▼────────┐
-                                                         │                 │
+                                                         ┌────────▼──────────┐
+                                                         │                   │
                                                          │  撮合引擎核心     │
-                                                         │ MatchingEngine   │
-                                                         │                 │
-                                                         │ process_order()  │
+                                                         │ MatchingEngine    │
+                                                         │                   │
+                                                         │ process_order()   │
                                                          │  ├─ slab_.alloc() │
                                                          │  ├─ match_limit_* │
                                                          │  ├─ match_market_*│
-                                                         │  ├─ handle_cancel  │
-                                                         │  ├─ record_trade() │
-                                                         │  └─ slab_.free()   │
+                                                         │  ├─ handle_cancel │
+                                                         │  ├─ record_trade()│
+                                                         │  └─ slab_.free()  │
                                                          └────┬──────┬───────┘
                                                               │      │
-                                                   ┌──────────┘      └──────────┐
-                                                   │                             │
-                                        ┌──────────▼────────┐      ┌──────────▼────────┐
+                                                   ┌──────────┘      └─────────┐
+                                                   │                           │
+                                        ┌──────────▼─────────┐      ┌──────────▼─────────┐
                                         │                    │      │                    │
-                                        │   SlabAllocator    │      │    OrderBook        │
+                                        │   SlabAllocator    │      │    OrderBook       │
                                         │                    │      │                    │
                                         │ ┌────┬────┬─────┐  │      │  PriceLadder[100K] │
                                         │ │32B │64B │128B │  │      │  + IntrusiveList   │
-                                        │ └────┴────┴─────┘  │      │  (零堆分配/O(1))    │
-                                        │ CAS无锁自由链表     │      │                     │
-                                        │ 预分配30万块        │      │ bids_[100001]       │
-                                        │ alignas(64)隔离     │      │ asks_[100001]       │
+                                        │ └────┴────┴─────┘  │      │  (零堆分配/O(1))   │
+                                        │ CAS无锁自由链表    │      │                    │
+                                        │ 预分配30万块       │      │ bids_[100001]      │
+                                        │ alignas(64)隔离    │      │ asks_[100001]      │
                                         └────────────────────┘      └────────────────────┘
                                                                              
                                                          ┌────────────────────┐
                                                          │   Logger 线程      │
-                                                         │  (异步轮询atomic)   │
-                                                         │  输出统计/状态      │
+                                                         │  (异步轮询atomic)  │
+                                                         │  输出统计/状态     │
                                                          └────────────────────┘
 ```
 
@@ -83,54 +83,54 @@
 外部订单源
     │
     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: 网络层 (Network)                                      │
+┌────────────────────────────────────────────────────────────────┐
+│  Layer 1: 网络层 (Network)                                     │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ UDPServer::recv_loop()                                 │   │
-│  │   ├── Non-blocking UDP socket (SOCK_DGRAM | O_NONBLOCK)│   │
-│  │   ├── SO_RCVBUF = 256KB                               │   │
-│  │   ├── 批量解析: WireOrder[] (34B/order, #pragma pack)  │   │
-│  │   └── 统计: packets / bytes / dispatched / drops/errors│   │
+│  │ UDPServer::recv_loop()                                  │   │
+│  │   ├── Non-blocking UDP socket (SOCK_DGRAM | O_NONBLOCK) │   │
+│  │   ├── SO_RCVBUF = 256KB                                 │   │
+│  │   ├── 批量解析: WireOrder[] (34B/order, #pragma pack)   │   │
+│  │   └── 统计: packets / bytes / dispatched / drops/errors │   │
 │  └────────────────────┬────────────────────────────────────┘   │
-└───────────────────────┼─────────────────────────────────────────┘
+└───────────────────────┼────────────────────────────────────────┘
                         │ push(Order)
                         ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 2: 通信层 (Messaging)                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ LockFreeQueue<Order> (SPSC Ring Buffer)                 │   │
-│  │   ├── capacity = 65536 (2^16, 位掩码取模)              │   │
-│  │   ├── head_: alignas(64) atomic (Consumer 写)          │   │
-│  │   ├── tail_: alignas(64) atomic (Producer 写)          │   │
-│  │   ├── push: memory_order_release (写完数据再更新tail)   │   │
-│  │   └── pop:  memory_order_acquire (先读head再读数据)     │   │
-│  └────────────────────┬────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ LockFreeQueue<Order> (SPSC Ring Buffer)                 │    │
+│  │   ├── capacity = 65536 (2^16, 位掩码取模)               │    │
+│  │   ├── head_: alignas(64) atomic (Consumer 写)           │    │
+│  │   ├── tail_: alignas(64) atomic (Producer 写)           │    │
+│  │   ├── push: memory_order_release (写完数据再更新tail)    │   │
+│  │   └── pop:  memory_order_acquire (先读head再读数据)      │   │
+│  └────────────────────┬────────────────────────────────────┘    │
 └───────────────────────┼─────────────────────────────────────────┘
                         │ pop(Order)
                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Layer 3: 撮合核心 (Matching Engine) — 热路径                      │
+┌────────────────────────────────────────────────────────────────┐
+│  Layer 3: 撮合核心 (Matching Engine) — 热路径                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ process_order(order)                                   │   │
-│  │                                                          │   │
-│  │  ① SlabAllocator::allocate()                           │   │
+│  │ process_order(order)                                    │   │
+│  │                                                         │   │
+│  │  ① SlabAllocator::allocate()                            │   │
 │  │     └── select_class(sizeof(Order)) → 128B Slab         │   │
-│  │     └── CAS pop free_list → placement new Order        │   │
-│  │                                                          │   │
+│  │     └── CAS pop free_list → placement new Order         │   │
+│  │                                                         │   │
 │  │  ② OrderBook 撮合                                       │   │
 │  │     ├── best_bid()/best_ask(): 扫描 PriceLadder[]       │   │
 │  │     ├── list_pop_front(level): O(1) 取 maker 成交       │   │
 │  │     ├── order->fill(qty): 更新 remaining/filled/status  │   │
 │  │     ├── list_push_back(level): O(1) 未成交挂单          │   │
 │  │     └── list_unlink(level): O(1) 撤单断链               │   │
-│  │                                                          │   │
+│  │                                                         │   │
 │  │  ③ SlabAllocator::deallocate(maker)                     │   │
 │  │     └── order->~Order() → CAS push free_list            │   │
-│  │                                                          │   │
+│  │                                                         │   │
 │  │  ④ record_trade(trade) → trades_ vector                 │   │
-│  │     └── stats_.total_trades.fetch_add(relaxed)         │   │
+│  │     └── stats_.total_trades.fetch_add(relaxed)          │   │
 │  └─────────────────────────────────────────────────────────┘   │
-│                                                                  │
+│                                                                │
 │  ┌──────────────────┐  ┌──────────────────────────────────┐    │
 │  │  SlabAllocator   │  │  OrderBook                       │    │
 │  │                  │  │                                  │    │
@@ -142,9 +142,9 @@
 │  │  free_list:      │  │                                  │    │
 │  │  CAS lock-free   │  │  bids_[0..100000] 买盘价格阶梯   │    │
 │  │  aligned(64)     │  │  asks_[0..100000] 卖盘价格阶梯   │    │
-│  └──────────────────┘  │  order_index_: unordered_map      │    │
+│  └──────────────────┘  │  order_index_: unordered_map     │    │
 │                        └──────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────┘
                         │
                         │ async read (relaxed atomics)
                         ▼
@@ -278,8 +278,8 @@ make -j$(nproc)
 
 ```
 ╔══════════════════════════════════════════════╗
-║   LOW-LATENCY MATCHING ENGINE - DIRECT MODE   ║
-║     C++17 / Linux / Lock-Free / No-Mutex      ║
+║   LOW-LATENCY MATCHING ENGINE - DIRECT MODE  ║
+║     C++17 / Linux / Lock-Free / No-Mutex     ║
 ╚══════════════════════════════════════════════╝
 
 Initializing matching engine...
@@ -306,12 +306,12 @@ Slab Available:         269996
 ============================================
 
 ╔══════════════════════════════════════════════╗
-║              PERFORMANCE SUMMARY              ║
+║              PERFORMANCE SUMMARY             ║
 ╠══════════════════════════════════════════════╣
-║  Orders Processed:           10000               ║
-║  Duration:                  943645 us             ║
-║  Throughput:                 10597 ops/sec       ║
-║  Avg Latency:                94014 ns           ║
+║  Orders Processed:           10000           ║
+║  Duration:                  943645 us        ║
+║  Throughput:                 10597 ops/sec   ║
+║  Avg Latency:                94014 ns        ║
 ╚══════════════════════════════════════════════╝
 ```
 
@@ -319,8 +319,8 @@ Slab Available:         269996
 
 ```
 ╔══════════════════════════════════════════════╗
-║   LOW-LATENCY MATCHING ENGINE - NETWORK MODE  ║
-║    C++17 / Linux / UDP / Lock-Free / No-Mutex  ║
+║   LOW-LATENCY MATCHING ENGINE - NETWORK MODE ║
+║    C++17 / Linux / UDP / Lock-Free / No-Mutex║
 ╚══════════════════════════════════════════════╝
 
 [UDPServer] Listening on UDP 0.0.0.0:50000 (SO_RCVBUF=256KB)
@@ -329,13 +329,13 @@ Slab Available:         269996
 ...
 
 ╔══════════════════════════════════════════════╗
-║            NETWORK STATISTICS                 ║
+║            NETWORK STATISTICS                ║
 ╠══════════════════════════════════════════════╣
-║  Packets Received:          9876               ║
-║  Bytes Received:      3357840 bytes            ║
-║  Orders Dispatched:     987600                 ║
-║  Queue Full Drops:          0                 ║
-║  Parse Errors:              0                 ║
+║  Packets Received:          9876             ║
+║  Bytes Received:      3357840 bytes          ║
+║  Orders Dispatched:     987600               ║
+║  Queue Full Drops:          0                ║
+║  Parse Errors:              0                ║
 ╚══════════════════════════════════════════════╝
 ```
 
@@ -387,16 +387,16 @@ Slab Available:         2698690
 
 ```
 ┌─────────────────────────────────────────────┐
-│              SlabAllocator                   │
+│              SlabAllocator                  │
 ├──────────┬──────────┬───────────────────────┤
-│  Slab[0]  │  Slab[1]  │     Slab[2]          │
-│   32B     │   64B    │      128B             │
-│ 100K块    │ 100K块   │    100K块 (Order用)   │
+│  Slab[0] │  Slab[1] │     Slab[2]           │
+│   32B    │   64B    │      128B             │
+│ 100K块   │ 100K块   │    100K块 (Order用)   │
 ├──────────┼──────────┼───────────────────────┤
-│ free_list │ free_list│    free_list          │
-│ (CAS无锁) │ (CAS无锁)│     (CAS无锁)          │
-│ allocated │ allocated│    allocated           │
-│ available │ available│    available           │
+│ free_list│ free_list│    free_list          │
+│ (CAS无锁)│ (CAS无锁)│     (CAS无锁)         │
+│ allocated│ allocated│    allocated          │
+│ available│ available│    available          │
 └──────────┴──────────┴───────────────────────┘
 ```
 
@@ -548,18 +548,18 @@ struct WireOrder {
 
 ```
 Producer Thread                 Consumer Thread (唯一写入者)
-┌─────────────────┐            ┌─────────────────────────────┐
-│  OrderGenerator  │            │     MatchingEngine           │
-│  / UDPServer     │──push()──▶│  process_order()             │
-│                  │   无锁    │    ├─ match_limit_buy/sell   │
-│                  │   队列     │    ├─ match_market_buy/sell  │
-│                  │           │    ├─ handle_cancel          │
-│                  │           │    └─ record_trade()         │
-└─────────────────┘            └──────────┬──────────────────┘
-                                          │
+┌──────────────────┐            ┌─────────────────────────────┐
+│  OrderGenerator  │            │     MatchingEngine          │
+│  / UDPServer     │──push()──▶│  process_order()            │
+│                  │   无锁     │    ├─ match_limit_buy/sell  │
+│                  │   队列     │    ├─ match_market_buy/sell │
+│                  │            │    ├─ handle_cancel         │
+│                  │            │    └─ record_trade()        │
+└──────────────────┘            └──────────┬──────────────────┘
+                                           │
 Logger Thread                            trades[]
-┌─────────────────┐                      │
-│  轮询 atomic    │◀─── async ──────────┘
+┌─────────────────┐                        │
+│  轮询 atomic    │◀─── async ────────────┘
 │  输出摘要       │
 └─────────────────┘
 ```
